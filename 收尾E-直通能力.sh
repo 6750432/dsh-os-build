@@ -53,7 +53,9 @@ mkdir -p "$R/etc/modprobe.d" "$R/etc/modules-load.d"
 cat > "$R/etc/modprobe.d/dsh-vfio.conf" <<'EOF'
 # ── dsh：Windows 分区直通用 ──
 #
-# 这套机器上 RTX 2060 的 IOMMU 组（实测）：
+# 以一台 i7-6700 + RTX 2060 的机器为例，它的 IOMMU 组长这样（实测）：
+#   ⚠️ 每台机器的组划分不同 —— 请用 `lspci -nn` 与
+#      `for d in /sys/kernel/iommu_groups/*/devices/*; do …; done` 查自己的。
 #     组1  00:01.0  PCI bridge        ← 插槽自己的桥，一起给
 #          01:00.0  RTX 2060         [10de:1f08]
 #          01:00.1  HDMI Audio       [10de:10f7]

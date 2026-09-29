@@ -45,6 +45,8 @@ echo
     -no-reboot \
     -kernel "$(ls "$DIR"/构建/kernel-rootfs/boot/vmlinuz-* | head -1)" \
     -initrd "$(ls "$DIR"/构建/kernel-rootfs/boot/initrd.img-* | head -1)" \
+    # 注：下面 append 里的那个根设备是**客机内部**的（-drive if=ide 的第一块盘），
+    #     与宿主的分区无关；宿主用哪个盘由 QEMU 的 -drive 决定。
     -append "root=/dev/sda rw console=tty0 console=ttyS0,115200 intel_iommu=on iommu=pt" \
     -drive "file=$IMG,format=raw,if=ide" \
     -nic user,model=e1000,hostfwd=tcp::2222-:22 \

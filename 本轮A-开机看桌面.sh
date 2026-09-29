@@ -95,6 +95,8 @@ rm -f "$MON" "$SHOT" "$LOG"
 qemu-system-x86_64 -enable-kvm -cpu host -m 1024 -smp 2 \
     -vga std -vnc 127.0.0.1:1 -no-reboot \
     -kernel "$K" -initrd "$I" \
+    # 注：下面 append 里的那个根设备是**客机内部**的（-drive if=ide 的第一块盘），
+    #     与宿主的分区无关；宿主用哪个盘由 QEMU 的 -drive 决定。
     -append "root=/dev/sda rw console=ttyS0,115200 intel_iommu=on iommu=pt" \
     -drive "file=$IMG,format=raw,if=ide" \
     -serial "file:$LOG" \

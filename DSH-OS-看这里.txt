@@ -116,7 +116,8 @@ DSH OS · 从 Debian 手拼的整机系统
       /etc/environment 就行 —— 一行的事，需要改动说一声
     · 没测过真机安装（现在只在 QEMU 里跑）
     · Windows 直通只把「能力」备好了，**没真跑过一次**
-      （要真跑得先回 Windows 关掉「快速启动」，再把 sdb3 加进 virt-manager）
+      （要真跑得先回 Windows 关掉「快速启动」，再把你的 Windows 分区
+         —— 用 `lsblk` 自己确认是哪一块，例如 /dev/sdXy —— 加进 virt-manager）
     · VM 里没有真显卡（vulkan 是 llvmpipe 软件渲染），所以插帧工具那种
       吃 GPU 的活在里面会慢 —— 真机上不会有这个问题
 
