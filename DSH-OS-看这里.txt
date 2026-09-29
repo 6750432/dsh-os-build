@@ -1,0 +1,150 @@
+DSH OS · 从 Debian 手拼的整机系统
+════════════════════════════════════════════════════════════
+
+【怎么打开】
+
+    双击桌面上的图标   DSH OS（从 Debian 手拼的系统）
+
+    —— 会开一个图形窗口，里面就是 DSH OS 的 XFCE 桌面，可以自己点。
+    （第一次会弹一次密码框，因为要拿硬件加速 KVM。
+      想以后不弹：终端里跑一次
+          sudo usermod -aG kvm <用户>
+      然后注销重进一次。）
+
+    关掉：直接关那个窗口就行。
+
+
+【登录信息】（平时用不上，lightdm 是自动登录的）
+
+        普通用户    dsh / dsh
+        管理员      root / root
+        主机名      dshos
+
+
+【它是什么】
+
+    DSH OS 1.0  ← 2026-09-26 改名，之前临时叫 mili
+      底座  Debian GNU/Linux 13.7 (trixie)   ← 现成件拼的，没有一个 Ubuntu/Mint 的包
+      + XFCE 4.20 完整桌面（面板、开始菜单、文件管理器、设置、壁纸、登录界面全在）
+      + picom / rofi / kitty / nnn / conky 这套极客配件
+      + fcitx5 中文输入法 + Noto CJK 字体
+      + 完整的开发工具链
+
+    名字是你定的：DSH OS。
+
+
+【实测数字】（同一台机器、同一块机械盘）
+
+                       DSH OS（自己拼的）    Linux Mint 22.3（宿主）
+    发行版             Debian 13.7 trixie    Linux Mint 22.3
+    包数               1349                  2311        ← 少 42%
+    进程数             149                   330         ← 少 55%
+    空载内存           474 MB                （没测，你开着浏览器和 Cherry）
+    开机到图形界面     约 11 秒              （没测）
+    systemd 失败单元   0 个                  —
+
+    验证过「真的能用」的：
+      · 能开机进桌面    截图见 构建/桌面截图-2.jpg
+      · 系统身份对      主机名 dshos ／ 发行版 DSH OS 1.0 ／ 桌面壁纸是 DSH OS
+      · 能上网          ens3 <内网IP> + 默认路由（DHCP 自己拿的）
+      · 能打中文        fcitx5 进程在跑 ／ libpinyin 在 ／ zh 字形 83 个
+      · 能跑工具链      gcc 14.2 真编译真运行出一个 hello、python3.13 +
+                        gi + cairo 都能 import、ffmpeg 7.1.5
+      · Windows 直通能力已留好（IOMMU 打开、vfio 就位、QEMU/OVMF/libvirt 装了）
+
+
+【里面都放了什么】
+
+    ~/拼装/
+    ├── DSH-OS-看这里.txt          ← 就是本文件
+    ├── 进度.md                    ← 全过程记录（含那次 OOM 的经过）
+    ├── 启动DSH-OS.sh              ← 启动器（桌面图标调的就是它）
+    ├── 改名DSH-OS.sh              ← 从 mili 改成 DSH OS 那个脚本（可重复跑）
+    ├── 构建/
+    │   ├── kernel-rootfs/         ← 系统本体（1349 包 / 4.1 G）
+    │   ├── 桌面版.img             ← 能直接开机的 ext4 镜像（8G，实占 4.2G）
+    │   ├── 桌面截图-2.jpg         ← 桌面截图（当天 01:47 那张）
+    │   ├── 桌面截图-2.ppm         ← 同上，无损原图
+    │   ├── 手动开机日志.txt       ← 你手动开机的串口日志（每次开都追加）
+    │   └── 桌面开机日志.txt       ← 自动测试时的日志
+    ├── 拼装.sh                    ← 主脚本：用 mmdebstrap 拼底座
+    ├── 加包.sh                    ← 增量加包（安全版，带三条护栏）
+    ├── 收尾.sh                    ← 网络 / 时区 / 开机自报数
+    ├── 收尾C-中文接线.sh          ← im-config + 环境变量 + 输入法自启
+    ├── 收尾E-直通能力.sh          ← IOMMU + vfio + QEMU/libvirt
+    ├── 本轮A-开机看桌面.sh        ← 自动测试：起 QEMU + 截图 + 读自报数
+    ├── 本轮B-做镜像和开机.sh      ← 做镜像 + 无头开机
+    ├── 装拼装工具.sh              ← 一次性准备（uidmap + subuid）
+    └── 补-QEMU图形后端.sh         ← 补装 qemu-system-gui（host 侧）
+
+    大部分脚本要 root，跑法是：  pkexec bash ~/拼装/<脚本名>
+    （pkexec 不认相对路径，一定写全路径）
+
+
+【想自己改点东西】
+
+    · 想加/减软件：改 加包.sh 里的组（X XFCE PANEL THEME TWEAK CJK AV DEV OURS VIRT），
+      然后   pkexec bash ~/拼装/加包.sh <组名>
+      它是**增量**的，跑不完可以再跑一次接着做（会先给中断的 dpkg 收尾）。
+
+    · 改完要重新生成镜像才能开机看到：跑  本轮A-开机看桌面.sh
+
+    · 想改主题/壁纸/面板：正常在 DSH OS 桌面里改就行；
+      但重启后会回到默认 —— 因为改动在 rootfs 里没落盘到镜像，
+      得重跑 本轮A 生成新镜像。（或提出需求，可加一个"保存状态"的开关）
+
+
+【改名这件事踩过的坑】（留个记录，别再踩）
+
+    XFCE 的壁纸存在 xfconf 渠道 xfce4-desktop 里，
+    文件名必须叫  xfce4-desktop.xml  —— 一开始写成了 xfdesktop.xml，
+    结果根本没人读它，xfdesktop 就回落到它编译进去的默认图
+    （/usr/share/backgrounds/xfce/xfce-x.svg，Debian 那只老鼠），
+    所以第一轮开机壁纸还是 Debian 的。
+
+    现在三重保险：① 写对文件名（系统级 /etc/xdg + 用户预置各一份）
+    ② 主题里 wallpaper 那几张（含 svg）全换成 DSH OS
+    ③ 连那张默认兜底图 xfce-x.svg 也换掉了。
+    实测 2026-09-26 01:47 开机：壁纸 = DSH OS，面板用户名 = dsh。✔
+
+
+【没做 / 没验的（说实话）】
+
+    · 「搬入其它项目」这条不在范围内，所以没做
+    · 界面语言还是英文（DejaVu/Noto CJK 都在，中文能显示能输入，
+      只是 UI 文案是英文）。想要中文界面：把 LANG=zh_CN.UTF-8 写进
+      /etc/environment 就行 —— 一行的事，需要改动说一声
+    · 没测过真机安装（现在只在 QEMU 里跑）
+    · Windows 直通只把「能力」备好了，**没真跑过一次**
+      （要真跑得先回 Windows 关掉「快速启动」，再把 sdb3 加进 virt-manager）
+    · VM 里没有真显卡（vulkan 是 llvmpipe 软件渲染），所以插帧工具那种
+      吃 GPU 的活在里面会慢 —— 真机上不会有这个问题
+
+
+【关于那次 OOM】（2026-09-25 23:15）
+
+    构建过程把宿主机搞崩了，不做辩解。原因三条：
+      ① 没给构建套任何内存上限
+      ② 把宿主的 /dev 和 /run rbind 进了 chroot（最危险的设计错误）
+      ③ 它被超时掐掉后其实没死（实测后台任务会活下来），轮询又加重了负载
+
+    现在所有构建脚本都带三条护栏：
+      · systemd-run --scope -p MemoryMax=4G -p MemorySwapMax=2G
+        -p CPUQuota=250% -p IOWeight=40   ← 出事只杀构建，碰不到桌面
+      · chroot 里造**私有**最小 /dev + 私有限大小 /dev/shm、/run
+      · 开跑前查 MemAvailable，不够直接拒跑
+
+    后半程全程宿主可用内存稳定在 10G 上下。
+
+
+【不想要了怎么删】
+
+    rm -rf ~/拼装                  ← 放掉 8.3 G
+    rm -f ~/Desktop/DSH-OS.desktop ~/Desktop/DSH-OS-桌面.jpg ~/Desktop/DSH-OS-看这里.txt
+
+    另外宿主上为了这个项目多装了三样东西：
+      uidmap（从属 id 区间）
+      qemu-system-x86 / qemu-utils / qemu-system-gui（虚拟化 + 图形后端）
+    不想留的话：
+      sudo apt purge qemu-system-x86 qemu-utils qemu-system-gui
+      sudo usermod --del-subuids 100000-165535 --del-subgids 100000-165535 <用户>
