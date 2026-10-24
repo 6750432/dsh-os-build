@@ -98,6 +98,17 @@ class App:
                  font=("DejaVu Sans Mono", 9)).pack(anchor="w", padx=16, pady=(14, 8))
         tk.Label(right, text="Writes only inside the host allowlist:\n~/Desktop/CBAP-Host-Test",
                  bg=PANEL, fg=MUTED, font=("DejaVu Sans", 9), justify="left").pack(anchor="w", padx=16)
+        cfg = read_json(HOST_CFG, {}) or {}
+        self.token_var = tk.StringVar(value=str(cfg.get("token") or ""))
+        token_row = tk.Frame(right, bg=PANEL)
+        token_row.pack(fill="x", padx=16, pady=(10, 0))
+        tk.Label(token_row, text="HOST TOKEN", bg=PANEL, fg=TEAL,
+                 font=("DejaVu Sans Mono", 8)).pack(anchor="w")
+        tk.Entry(token_row, textvariable=self.token_var, show="\u2022",
+                 bg="#060b10", fg=TEXT, insertbackground=TEAL, relief="flat",
+                 font=("DejaVu Sans Mono", 9)).pack(fill="x", pady=(3, 0))
+        tk.Label(right, text="read <socket>.token on the host; never use a public test token",
+                 bg=PANEL, fg=MUTED, font=("DejaVu Sans", 8)).pack(anchor="w", padx=16)
         self._button(right, "Create safe host file", self.host_test, AMBER, BG).pack(anchor="w", padx=16, pady=14)
 
         self.log = tk.Text(right, height=10, bg="#060b10", fg=TEXT, insertbackground=TEAL,
@@ -171,7 +182,11 @@ class App:
         cfg = read_json(HOST_CFG, {}) or {}
         host = cfg.get("host", "10.0.2.2")
         port = int(cfg.get("port", 18765))
-        token = cfg.get("token", "")
+        token = self.token_var.get().strip()
+        if not token:
+            self.log.insert("end", "ERROR: enter the host token from <socket>.token\n")
+            self.log.see("end")
+            return
         self.log.insert("end", f"host test -> {host}:{port}\n")
         self.log.see("end")
 

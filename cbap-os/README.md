@@ -148,7 +148,9 @@ cyberdyne-bridge/drivers/host_desktop/driver.py
 
 It exposes only `host://desktop` with `write_file`, `list`, `stat`, `ping`
 under `~/Desktop/CBAP-Host-Test`. No shell. QEMU user networking reaches it at
-`10.0.2.2:18765`; the bridge binds `127.0.0.1` only.
+`10.0.2.2:18765`; the bridge binds `127.0.0.1` only. The bridge generates a
+random token and writes it to `<socket>.token` (0600); enter it in the Control
+Center's `HOST TOKEN` field. No fixed test token is shipped.
 
 ## Live ISO
 

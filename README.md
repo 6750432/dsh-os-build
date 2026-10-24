@@ -281,6 +281,15 @@ safe_state、portal 输入）：
 cyberdyne-bridge/docs/DEVICE-PARITY.md
 ```
 
+Host bridge 默认生成随机 token，并写在宿主机：
+
+```text
+<socket>.token
+```
+
+把它填进 CBAP Control Center 的 `HOST TOKEN` 输入框。不要再使用公开的固定
+测试 token。
+
 当前暴露 5 个 CBAP device_id：
 
 ```text

@@ -1,6 +1,6 @@
 {
   "host": "10.0.2.2",
   "port": 18765,
-  "token": "cbap-host-test-2026",
-  "note": "QEMU user-net host gateway; test only. Bind host bridge to 127.0.0.1."
+  "token": "",
+  "note": "QEMU user-net host gateway. Read <socket>.token on the host and enter it in Control Center; do not ship a fixed test token."
 }
