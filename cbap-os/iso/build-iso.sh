@@ -112,24 +112,23 @@ cp "$WORK/initrd.img" "$WORK/iso/boot/initrd.img"
 mksquashfs "$WORK/root" "$WORK/iso/casper/filesystem.squashfs" \
     -noappend -comp zstd -Xcompression-level 3 -processors 2
 
-cat > "$WORK/iso/boot/grub/grub.cfg" <<'EOF'
-set timeout=10
-set default=0
-insmod all_video
-
-menuentry "CBAP OS 0.1 (live)" {
-    linux /boot/vmlinuz root=/dev/ram0 rw console=tty0 console=ttyS0,115200
-    initrd /boot/initrd.img
-}
-menuentry "CBAP OS 0.1 (live, no version menu)" {
-    linux /boot/vmlinuz root=/dev/ram0 rw console=tty0 console=ttyS0,115200 cbap.nomenu
-    initrd /boot/initrd.img
-}
-menuentry "CBAP OS 0.1 (live, serial console)" {
-    linux /boot/vmlinuz root=/dev/ram0 rw console=ttyS0,115200 cbap.nomenu
-    initrd /boot/initrd.img
-}
-EOF
+# Build one GRUB entry per installed CBAP slot. The ISO boot selector is
+# GRUB itself, so the systemd tty1 menu is suppressed with cbap.nomenu.
+PYV="$(find "$WORK/root/opt/cbap-os/versions/python" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -1)"
+CBAP_VERS="$(find "$WORK/root/opt/cbap-os/versions/cbap" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -rV)"
+{
+    echo 'set timeout=10'
+    echo 'set default=0'
+    echo 'insmod all_video'
+    echo
+    for v in $CBAP_VERS; do
+        echo "menuentry \"CBAP OS 0.1 — CBAP $v / Python $PYV\" {"
+        echo "    linux /boot/vmlinuz root=/dev/ram0 rw console=tty0 console=ttyS0,115200 cbap.cbap=$v cbap.python=$PYV cbap.nomenu"
+        echo '    initrd /boot/initrd.img'
+        echo '}'
+        echo
+    done
+} > "$WORK/iso/boot/grub/grub.cfg"
 
 say "creating ISO with grub-mkrescue"
 rm -f "$OUTPUT"

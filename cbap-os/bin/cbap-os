@@ -387,20 +387,24 @@ def cmd_boot(args) -> int:
     return 0
 
 
-def choose(prompt: str, items: list[dict], default: str, timeout: int) -> str:
-    print()
-    print(prompt)
+def choose(prompt: str, items: list[dict], default: str, timeout: int,
+           stream=None) -> str:
+    stream = stream or sys.stdin
+    out = stream if stream is not sys.stdin else sys.stdout
+    out.write("\n" + prompt + "\n")
     for i, item in enumerate(items, 1):
         mark = "*" if item["version"] == default else " "
-        print(f"  {mark} [{i}] {item['version']}")
-    print(f"  default [{default}]  (timeout {timeout}s)")
-    if not sys.stdin.isatty() or timeout <= 0:
+        out.write(f"  {mark} [{i}] {item['version']}\n")
+    out.write(f"  default [{default}]  (timeout {timeout}s)\n")
+    out.flush()
+    if not stream.isatty() or timeout <= 0:
         return default
-    ready, _, _ = select_mod.select([sys.stdin], [], [], timeout)
+    ready, _, _ = select_mod.select([stream], [], [], timeout)
     if not ready:
-        print("  timeout; using default")
+        out.write("  timeout; using default\n")
+        out.flush()
         return default
-    line = sys.stdin.readline().strip()
+    line = stream.readline().strip()
     if not line:
         return default
     if line.isdigit():
@@ -410,7 +414,8 @@ def choose(prompt: str, items: list[dict], default: str, timeout: int) -> str:
     for item in items:
         if item["version"] == line:
             return item["version"]
-    print("  invalid choice; using default")
+    out.write("  invalid choice; using default\n")
+    out.flush()
     return default
 
 
@@ -422,11 +427,17 @@ def cmd_boot_menu(args) -> int:
     cur = selection()
     default_cbap = cur.get("cbap") or cbaps[-1]["version"]
     default_py = cur.get("python") or pythons[-1]["version"]
+    stream = None
+    if args.tty:
+        try:
+            stream = open(args.tty, "r+", encoding="utf-8", buffering=1)
+        except OSError as e:
+            print(f"cbap-os: cannot open {args.tty}: {e}", file=sys.stderr)
     if args.noninteractive:
         cbap, py = default_cbap, default_py
     else:
-        cbap = choose("CBAP version:", cbaps, default_cbap, args.timeout)
-        py = choose("Python runtime:", pythons, default_py, args.timeout)
+        cbap = choose("CBAP version:", cbaps, default_cbap, args.timeout, stream)
+        py = choose("Python runtime:", pythons, default_py, args.timeout, stream)
     write_selection(cbap, py, "boot-menu")
     print(f"selected cbap={cbap} python={py}")
     return 0
@@ -506,6 +517,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("boot-menu", help="interactive boot selector")
     p.add_argument("--timeout", type=int, default=10)
+    p.add_argument("--tty", default=None,
+                   help="open this tty for menu I/O (e.g. /dev/tty1)")
     p.add_argument("--noninteractive", action="store_true")
     p.set_defaults(func=cmd_boot_menu)
 

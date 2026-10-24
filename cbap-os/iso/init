@@ -18,6 +18,18 @@ mount -t sysfs sysfs /sys 2>/dev/null || true
 mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
 mkdir -p /run /tmp /cdrom /lower /upper /newroot
 
+# devtmpfs should create these, but a trimmed kernel may not mount it. Keep
+# static fallback nodes so rescue mode and IDE/SCSI CD probing still work.
+for node in "null c 1 3" "console c 5 1" "sr0 b 11 0" "sda b 8 0" "vda b 254 0"; do
+    set -- $node
+    [ -e "/dev/$1" ] || mknod -m 666 "/dev/$1" "$2" "$3" "$4" 2>/dev/null || true
+done
+
+# sr_mod/cdrom/isofs are modules in Debian's kernel, not built-ins.
+for mod in loop squashfs overlay isofs sr_mod cdrom libata ata_piix ata_generic; do
+    modprobe "$mod" 2>/dev/null || true
+done
+
 say "probing for the CBAP OS ISO"
 found=""
 for dev in /dev/sr* /dev/sd* /dev/vd*; do
@@ -34,12 +46,7 @@ done
 [ -n "$found" ] || rescue "cannot find casper/filesystem.squashfs on any block device"
 
 say "ISO device: $found"
-# These are normally built into the Debian kernel, but loading them explicitly
-# makes the ISO work with a trimmed kernel too.
-modprobe loop 2>/dev/null || true
-modprobe squashfs 2>/dev/null || true
-modprobe overlay 2>/dev/null || true
-
+# Modules were loaded above; this keeps the mount path explicit.
 mount -t squashfs -o loop,ro /cdrom/casper/filesystem.squashfs /lower \
     || rescue "cannot mount squashfs"
 

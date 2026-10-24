@@ -50,9 +50,26 @@ CBAP OS 0.1
 
 ## 开机选择
 
-### 图形/本地控制台
+### ISO / GRUB
 
-开机时 `cbap-os-select.service` 在 tty1 显示：
+ISO 的版本选择在 GRUB 菜单里，每个已安装 CBAP 槽一项：
+
+```text
+CBAP OS 0.1 - CBAP v1.4.0 / Python 3.13
+CBAP OS 0.1 - CBAP v1.0.0 / Python 3.13
+```
+
+![CBAP OS GRUB 版本菜单](docs/screenshots/cbap-os-grub.png)
+
+选中的版本通过内核参数传入：
+
+```text
+cbap.cbap=v1.4.0 cbap.python=3.13
+```
+
+### 安装盘 / tty1
+
+安装到磁盘的系统还启用了 `cbap-os-select.service`，在 tty1 显示：
 
 ```text
 CBAP version:
@@ -67,6 +84,8 @@ Python runtime:
 ```text
 /etc/cbap-os/selection.json
 ```
+
+这条 tty1 路径在 QEMU 里没有成功显示，ISO 因此改用 GRUB 菜单。
 
 ### 无头 / QEMU 串口
 
@@ -228,7 +247,20 @@ GRUB -> vmlinuz + 最小 busybox initramfs
 这不需要 `live-boot` 包，也不把 4G rootfs 直接塞进 ISO 的 ext4；
 rootfs 在 ISO 里是压缩 squashfs。
 
-**当前已生成过一张 1.8G 的本地测试 ISO**，但没有在 QEMU 里回启动验证。
+**当前这张 ISO 已在 QEMU/KVM 里启动到 CBAP OS 桌面**：
+
+```text
+QEMU -m 4096 (4G 上限)
+GRUB BIOS + UEFI
+CBAP OS 0.1
+CBAP v1.4.0 (默认) / v1.0.0
+Python 3.13
+```
+
+测试截图：
+
+![CBAP OS 桌面](docs/screenshots/cbap-os-desktop.png)
+
 ISO 不入库（`.gitignore` 排除 `*.iso`）。
 
 ## 测试

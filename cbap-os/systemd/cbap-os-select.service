@@ -11,7 +11,7 @@ ConditionKernelCommandLine=!cbap.nomenu
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/cbap-os boot-menu --timeout 10
+ExecStart=/usr/local/bin/cbap-os boot-menu --timeout 10 --tty /dev/tty1
 StandardInput=tty
 StandardOutput=tty
 TTYPath=/dev/tty1

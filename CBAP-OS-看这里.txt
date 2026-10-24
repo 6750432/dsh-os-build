@@ -22,7 +22,13 @@ Debian 13 (trixie) + XFCE 底座，加上 CBAP 运行时层：
 
 【开机选版本】
 
-tty1 会出现：
+ISO 的版本选择在 GRUB 菜单里：每个已安装 CBAP 槽一项，例如：
+
+    CBAP OS 0.1 - CBAP v1.4.0 / Python 3.13
+    CBAP OS 0.1 - CBAP v1.0.0 / Python 3.13
+
+安装到磁盘的系统还带有 tty1 菜单；ISO 用 GRUB，所以启动参数带 cbap.nomenu。
+tty1 菜单内容示例：
 
     CBAP version:
       [1] v1.4.0

@@ -5,7 +5,7 @@
 # 改完要跑一次 本轮A-开机看桌面.sh 重新生成镜像才能看到效果。
 set -u
 DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
-R="$DIR/构建/kernel-rootfs"
+R="${CBAP_OS_ROOT:-$DIR/构建/kernel-rootfs}"
 NEWHOST=cbapos        # 主机名不能有空格
 NEWUSER=dsh
 BRAND="CBAP OS"
@@ -71,12 +71,45 @@ for cand in /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf \
             /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf; do
     [ -f "$cand" ] && { FONT="-font $cand"; break; }
 done
-# shellcheck disable=SC2086
-convert -size 1920x1200 gradient:'#0a1f33'-'#12507d' \
-    $FONT -gravity center \
-    -pointsize 190 -fill '#eaf6ff' -annotate +0-70 "$BRAND" \
-    -pointsize 46  -fill '#8fc4e8' -annotate +0+90 "Debian 13 (trixie) · built by hand" \
-    "$W" && echo "  ✔ $W ($(identify -format '%wx%h' "$W"))" || echo "  ✘ 生成失败"
+if command -v convert >/dev/null 2>&1; then
+    # shellcheck disable=SC2086
+    convert -size 1920x1200 gradient:'#0a1f33'-'#12507d' \
+        $FONT -gravity center \
+        -pointsize 190 -fill '#eaf6ff' -annotate +0-70 "$BRAND" \
+        -pointsize 46  -fill '#8fc4e8' -annotate +0+90 "Debian 13 (trixie) · CBAP runtime slots" \
+        "$W" && echo "  ✔ $W ($(identify -format '%wx%h' "$W"))" || echo "  ✘ 生成失败"
+else
+    # Hosts without ImageMagick: use Pillow if present. This is the path used
+    # by the ISO build environment, which deliberately has a small tool set.
+    python3 - "$W" "$BRAND" <<'PY'
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
+out, brand = Path(sys.argv[1]), sys.argv[2]
+w, h = 1920, 1200
+im = Image.new("RGB", (w, h))
+d = ImageDraw.Draw(im)
+for y in range(h):
+    t = y / (h - 1)
+    d.line([(0, y), (w, y)], fill=(int(10 + 8*t), int(31 + 49*t), int(51 + 74*t)))
+fonts = ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"]
+font_path = next((p for p in fonts if Path(p).exists()), None)
+try:
+    big = ImageFont.truetype(font_path, 190) if font_path else ImageFont.load_default()
+    small = ImageFont.truetype(font_path, 46) if font_path else ImageFont.load_default()
+except Exception:
+    big = small = ImageFont.load_default()
+def center(text, y, font, fill):
+    box = d.textbbox((0, 0), text, font=font)
+    d.text(((w - (box[2]-box[0]))/2, y), text, font=font, fill=fill)
+center(brand, 430, big, "#eaf6ff")
+center("Debian 13 (trixie) · CBAP runtime slots", 700, small, "#8fc4e8")
+out.parent.mkdir(parents=True, exist_ok=True)
+im.save(out)
+print(f"  ✔ {out} ({im.width}x{im.height})")
+PY
+fi
 
 echo
 echo "════ 4/5 让桌面用上这张（四重保险）════"

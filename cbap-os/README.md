@@ -61,9 +61,9 @@ cbap.cbap=v1.4.0 cbap.python=3.13
 `cbap-os boot` reads the cmdline; explicit `--cbap` / `--python` arguments win.
 To suppress the tty1 menu, add `cbap.nomenu` to the kernel command line.
 
-The QEMU boot helper does not currently generate a GRUB menu. The menu is a
-systemd oneshot on tty1, so it works with the direct-kernel boot used by this
-repo.
+The ISO has its own GRUB menu. The installed-disk systemd tty1 menu is
+enabled but was not successfully exercised in the QEMU image; the ISO uses
+`cbap.nomenu` and selects through GRUB instead.
 
 ## Hot-swap after login
 
