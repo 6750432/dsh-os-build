@@ -42,7 +42,7 @@ else
     cat > "$R/etc/default/grub" <<'EOF'
 GRUB_DEFAULT=0
 GRUB_TIMEOUT=5
-GRUB_DISTRIBUTOR="DSH OS"
+GRUB_DISTRIBUTOR="CBAP OS"
 GRUB_CMDLINE_LINUX_DEFAULT="quiet intel_iommu=on iommu=pt"
 GRUB_CMDLINE_LINUX=""
 EOF

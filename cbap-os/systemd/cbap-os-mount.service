@@ -1,0 +1,17 @@
+[Unit]
+Description=CBAP OS mount selected CBAP and Python slots
+Documentation=file:/opt/cbap-os/README.md
+DefaultDependencies=no
+After=local-fs.target cbap-os-select.service
+Wants=cbap-os-select.service
+Before=cbap.service
+RequiresMountsFor=/opt/cbap-os
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/cbap-os boot --mount-only
+TimeoutStartSec=30
+
+[Install]
+WantedBy=basic.target

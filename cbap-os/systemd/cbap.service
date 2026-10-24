@@ -1,0 +1,29 @@
+[Unit]
+Description=CBAP Kernel (selected CBAP/Python slot)
+Documentation=file:/opt/cbap-os/README.md
+Requires=cbap-os-mount.service
+After=cbap-os-mount.service network.target
+ConditionPathExists=/etc/cbap-os/runtime.env
+ConditionPathExists=/opt/cbap-os/current/cbap/kernel
+
+[Service]
+Type=simple
+ExecCondition=/usr/local/bin/cbap-os hand-present
+User=cbap
+Group=cbap
+WorkingDirectory=/opt/cbap-os/current/cbap
+EnvironmentFile=/etc/cbap-os/runtime.env
+Environment=CBAP_HOME=/opt/cbap-os/current/cbap
+Environment=PYTHONUNBUFFERED=1
+RuntimeDirectory=cbap
+RuntimeDirectoryMode=0700
+StateDirectory=cbap
+StateDirectoryMode=0700
+ExecStart=/usr/local/bin/cbap-service
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGTERM
+TimeoutStopSec=15
+
+[Install]
+WantedBy=multi-user.target

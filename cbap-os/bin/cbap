@@ -1,0 +1,16 @@
+#!/bin/sh
+# Run the selected CBAP source with the selected Python runtime.
+set -eu
+BASE="${CBAP_HOME:-/opt/cbap-os/current/cbap}"
+PY="${CBAP_PYTHON:-/opt/cbap-os/current/python/bin/python3}"
+if [ ! -x "$PY" ]; then
+    echo "cbap: selected Python is missing: $PY" >&2
+    exit 2
+fi
+if [ ! -d "$BASE/kernel" ]; then
+    echo "cbap: selected CBAP source is missing: $BASE/kernel" >&2
+    exit 2
+fi
+cd "$BASE"
+export PYTHONPATH="$BASE${PYTHONPATH:+:$PYTHONPATH}"
+exec "$PY" -m kernel.legacy_runtime "$@"

@@ -33,7 +33,7 @@ cleanup
 step "1/4 时区、主机名、清掉上一轮的截图残渣"
 ln -sf /usr/share/zoneinfo/Asia/Shanghai "$R/etc/localtime"
 echo "Asia/Shanghai" > "$R/etc/timezone"
-echo "dshos" > "$R/etc/hostname"
+echo "cbapos" > "$R/etc/hostname"
 rm -f /var/tmp/dshshot*.ppm
 echo "  时区 → $(readlink "$R/etc/localtime" | sed 's|.*/zoneinfo/||')"
 

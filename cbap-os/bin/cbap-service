@@ -1,0 +1,18 @@
+#!/bin/sh
+# systemd entrypoint. Hand is optional: no hand -> service is skipped by
+# ExecCondition before this script runs.
+set -eu
+: "${CBAP_HAND_SOCKET:=/run/cyberdyne/cyberdyne.sock}"
+: "${CBAP_CBAP_SOCKET:=/run/cbap/cbap.sock}"
+: "${CBAP_DEVICE:=/opt/cbap-os/current/cbap/drivers/mc/device.json}"
+: "${CBAP_MAPPING:=/opt/cbap-os/current/cbap/drivers/mc/mapping.json}"
+: "${CBAP_AUDIT:=/var/lib/cbap/audit.jsonl}"
+ARGS="--hand-socket $CBAP_HAND_SOCKET --cbap-socket $CBAP_CBAP_SOCKET
+      --device $CBAP_DEVICE --mapping $CBAP_MAPPING --audit $CBAP_AUDIT"
+if [ -n "${CBAP_ALLOWED_UIDS:-}" ]; then
+    for uid in $(printf '%s' "$CBAP_ALLOWED_UIDS" | tr ',' ' '); do
+        ARGS="$ARGS --allowed-uid $uid"
+    done
+fi
+# shellcheck disable=SC2086
+exec /usr/local/bin/cbap $ARGS

@@ -57,6 +57,7 @@ for G in "$@"; do
     AV)     P="pipewire pipewire-pulse pipewire-alsa wireplumber alsa-utils pavucontrol mpv ffmpeg audacious" ;;
     NET)    P="network-manager network-manager-gnome wpasupplicant firmware-iwlwifi firmware-misc-nonfree" ;;
     DEV)    P="build-essential python3 python3-venv python3-pip python3-dev python3-tk vim neovim tmux gdb strace pkg-config cmake meson ninja-build ripgrep fd-find fzf bat eza zoxide btop htop duf procs sd delta lazygit tig jq httpie hyperfine direnv just ncdu tree sqlite3 git-lfs" ;;
+    CBAP)   P="python3 python3-venv python3-pip git whiptail jq util-linux mount ca-certificates" ;;
     OURS)   P="python3-gi python3-gi-cairo python3-cairo python3-pil gir1.2-gtk-3.0 gir1.2-gdkpixbuf-2.0 gir1.2-glib-2.0 gir1.2-pango-1.0 wmctrl xdotool mesa-vulkan-drivers vulkan-tools libvulkan1 libxtst6 libxext6 lm-sensors" ;;
     VIRT)   P="qemu-system-x86 qemu-utils libvirt-daemon-system libvirt-clients virt-manager ovmf swtpm swtpm-tools" ;;
     *)      echo "✗ 不认识的组：$G"; exit 1 ;;
@@ -108,8 +109,8 @@ printf '#!/bin/sh\nexit 101\n' > "$R/usr/sbin/policy-rc.d"
 chmod 755 "$R/usr/sbin/policy-rc.d"
 
 # 顺手把主机名设上
-echo "dshos" > "$R/etc/hostname"
-grep -q '^127.0.1.1' "$R/etc/hosts" 2>/dev/null || echo "127.0.1.1  dshos" >> "$R/etc/hosts"
+echo "cbapos" > "$R/etc/hostname"
+grep -q '^127.0.1.1' "$R/etc/hosts" 2>/dev/null || echo "127.0.1.1  cbapos" >> "$R/etc/hosts"
 
 echo "── 开始装（$(date +%H:%M:%S)，内层限时 ${INNER}s）──"
 timeout "$INNER" chroot "$R" /bin/bash -c "

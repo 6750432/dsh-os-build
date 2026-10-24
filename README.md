@@ -1,90 +1,249 @@
-# DSH OS —— 用 mmdebstrap 从 Debian 手拼的整机系统
+# CBAP OS —— 专门给 CBAP 用的可版本化操作系统
 
-一套**构建脚本与文档**：从 Debian 13 (trixie) 的官方源出发，
-用 `mmdebstrap` 一步步拼出一个能开机的完整桌面系统，全程不依赖任何发行版安装器。
+CBAP OS 是从 **DSH OS** 长出来的：Debian 13 (trixie) 由 `mmdebstrap`
+手工拼成，桌面栈保持 XFCE；上面加一层 **CBAP 运行时**：
 
-**拼出来的系统里没有一个 Ubuntu / Mint 的包** —— 它是从 Debian 源码级组装起来的。
+```text
+Debian 13
+  └── Python 3
+  └── /opt/cbap-os/versions/cbap/<version>      CBAP 源码槽
+  └── /opt/cbap-os/versions/python/<version>    Python 运行时槽
+  └── /opt/cbap-os/current/{cbap,python}        当前挂载点
+  └── CBAP Kernel systemd 服务
+```
 
-本仓库只放**脚本与文档**；rootfs、镜像、工具链等产物不入库（体积大、可重建）。
+目标不是“装一份 CBAP”，而是：
 
----
+> **每次开机可以选择挂哪一个 CBAP 版本、哪一个 Python 版本；进系统后还能热切换。**
 
-## 做出来的东西长什么样
+## 当前能力
 
-| 项目 | 结果 |
+| 能力 | 状态 |
 |---|---|
-| 发行版 | DSH OS 1.0（主机名 `dshos`，lightdm 自动登录） |
-| 包数 | **1349**（对照：宿主 Linux Mint 2311） |
-| 开机到图形界面 | 约 **11 秒** |
-| 空载内存 | **474 MB** |
-| 失败 systemd 单元 | 0 |
-| 图形栈 | XFCE 4.20 |
-| 验证 | gcc 14.2 在系统内真编译真跑 |
+| Debian 13 + XFCE 底座 | 继承 DSH OS 脚本 |
+| Python 3 + `cbap` 命令 | 构建时安装 |
+| CBAP 多版本槽 | `v1.0.0` / `v1.4.0` 可同时安装 |
+| Python 多版本槽 | 支持自包含 prefix；默认系统 Python 槽 |
+| 开机选择版本 | tty1 菜单 + 内核 cmdline |
+| 登录后热切换 | `cbap-os use --cbap ... --python ...` |
+| 失败回滚 | 停止服务 → 切挂载 → 起服务；失败恢复旧槽 |
+| 真实镜像构建 | 本次改动未重新跑 QEMU 构建 |
+| 多 Python 二进制 | 机制已留；默认只带系统 Python |
 
-实测环境是 1 vCPU / 1 GB 内存的 QEMU 虚拟机（KVM 加速）。
+## 启动后的样子
 
----
-
-## 脚本一览
-
-```
-拼装.sh              主脚本：从零拼出底座（mmdebstrap）
-加包.sh              往已有 rootfs 里追加软件包组
-本轮A-装QEMU和拼装.sh  一次性：装 QEMU + 拼装
-本轮A-开机看桌面.sh    QEMU 开机并截图（走 QMP + VNC）
-本轮B-做镜像和开机.sh  把 rootfs 做成可开机镜像
-收尾.sh / 收尾C / 收尾E  时区、主机名、中文接线、直通能力等收尾
-改名DSH-OS.sh         改名与品牌化（只动 rootfs，可重复跑，不需要 root）
-启动DSH-OS.sh         直接启动现成镜像
-补-QEMU图形后端.sh     宿主侧 QEMU 图形后端
-装拼装工具.sh         宿主侧一次性准备
-DSH-OS-看这里.txt      使用说明（先看这个）
-进度.md               构建过程与踩坑记录
+```text
+CBAP OS 0.1
+  ├── Python 3.13 (system slot)
+  ├── CBAP v1.4.0 (default)
+  ├── CBAP v1.0.0 (可选)
+  └── cbap.service（有 hand 才启动）
 ```
 
-跑法（脚本需要 root，用 `pkexec` 弹密码框）：
+`cbap.service` 的运行条件是：
+
+```text
+存在 /run/cyberdyne/cyberdyne.sock
+```
+
+没有 hand 时服务被 systemd 条件跳过，不会让系统卡在 failed 状态。
+
+## 开机选择
+
+### 图形/本地控制台
+
+开机时 `cbap-os-select.service` 在 tty1 显示：
+
+```text
+CBAP version:
+  [1] v1.4.0
+  [2] v1.0.0
+Python runtime:
+  [1] 3.13
+```
+
+10 秒不选就用默认值。选完写：
+
+```text
+/etc/cbap-os/selection.json
+```
+
+### 无头 / QEMU 串口
+
+没有 tty1 菜单时，用内核参数：
+
+```text
+cbap.cbap=v1.4.0 cbap.python=3.13
+```
+
+或显式关闭菜单：
+
+```text
+cbap.nomenu
+```
+
+## 登录后热切换
 
 ```bash
-pkexec bash ~/拼装/拼装.sh          # 拼一个最小系统
-pkexec bash ~/拼装/本轮A-开机看桌面.sh   # 拼 + 开机 + 截图
+sudo cbap-os list
+sudo cbap-os status
+sudo cbap-os use --cbap v1.0.0 --python 3.13
+sudo cbap-os rollback
 ```
 
----
+`use` 的实际动作：
 
-## 三条硬护栏（都是事故换来的）
-
-这套脚本内置了三条保护，**底线是不让构建过程拖垮宿主机器**：
-
-1. **资源限额**：所有重活都套在
-   `systemd-run --scope -p MemoryMax=4G -p MemorySwapMax=2G -p CPUQuota=250%` 里跑，
-   脚本自己判断递归、开跑前检查可用内存，不够直接拒跑。
-2. **隔离 `chroot` 的 `/dev` 与 `/run`**：在里面造**私有**的最小 `/dev`
-   和**有大小上限**的 `/dev/shm`、`/run`，**绝不 rbind 宿主的对应目录**。
-3. **挡住 postinst 启动服务**：用 `policy-rc.d` 防止包安装脚本去碰宿主的 init。
-
-`进度.md` 里记了立这三条护栏的那次事故（构建把宿主机搞到 OOM），值得一读。
-
----
-
-## 已知限制（诚实交代）
-
-- **没测过真机安装**，只在 QEMU 里跑过。
-- **显卡直通只把「能力」备好了，没真跑过一次**。脚本里写了怎么启用
-  （`/etc/modprobe.d/dsh-vfio.conf` 里那行是**故意注释着**的）。
-- 界面语言目前是**英文**。
-- VM 里没有真显卡（vulkan 走 llvmpipe 软件渲染），吃 GPU 的程序会比较慢 —— 真机上不会有这个问题。
-- 脚本内核启动参数里的那个根设备路径是**客机内部**的（由 QEMU 的 `-drive` 决定），与宿主分区无关。
-
----
-
-## 许可 / License
-
-MIT License。
-
-- [`LICENSE`](LICENSE) —— 本项目自己的 MIT
-- [`LICENSE-LOCAL`](LICENSE-LOCAL) —— 同一份，命名与其它仓库统一
-
+```text
+校验版本槽
+停止 cbap.service（如果它正在跑）
+卸载 current/cbap、current/python
+重新 bind mount 到目标槽
+原子写 selection.json
+如果服务原来在跑，重启服务
+任一步失败 → 恢复旧挂载和旧 selection
 ```
+
+Python 是解释器，所以这里的“热插拔”准确说是：
+
+> **控制面热切换 + CBAP 进程重启**，不是在一个已经加载 libpython 的进程里换解释器。
+
+## 目录
+
+```text
+/opt/cbap-os/
+  versions/cbap/<version>/      不可变 CBAP 源码
+  versions/python/<version>/    Python 运行时 / prefix
+  current/cbap/                 bind mount
+  current/python/               bind mount
+  bin/cbap-os                   版本管理器
+  bin/cbap                      用当前选择运行 CBAP
+
+/etc/cbap-os/
+  selection.json                当前/下次启动选择
+  runtime.env                   hand、socket、audit 路径
+
+/usr/local/bin/
+  cbap-os
+  cbap
+  cbap-python                   当前选择的 Python
+  cbap-service                  systemd 入口
+```
+
+## 构建
+
+沿用 DSH OS 的底座流程：
+
+```bash
+pkexec bash 拼装.sh
+pkexec bash 本轮A-开机看桌面.sh
+pkexec bash 收尾.sh
+pkexec bash 收尾C-中文接线.sh
+pkexec bash 收尾E-直通能力.sh
+```
+
+再加 CBAP 层：
+
+```bash
+# 默认安装 v1.4.0 + v1.0.0；本地源码可指定 CBAP_SRC
+pkexec env CBAP_SRC=/path/to/cyberdyne-bridge \
+  CBAP_VERSIONS="v1.0.0 v1.4.0" \
+  bash 收尾F-CBAP-OS.sh
+```
+
+然后品牌化并重做镜像：
+
+```bash
+bash 改名CBAP-OS.sh
+pkexec bash 本轮B-做镜像和开机.sh
+```
+
+启动：
+
+```bash
+bash 启动CBAP-OS.sh
+```
+
+> 本次没有实际重跑 Debian 拼装/QEMU。上面是构建路径，不是“已产出镜像”的声明。
+
+## 版本槽怎么加
+
+CBAP：
+
+```bash
+sudo bash cbap-os/install.sh --root / \
+  --cbap-version v1.0.0 --force
+```
+
+Python：准备一个自包含 prefix（例如 python-build-standalone）：
+
+```bash
+sudo bash cbap-os/install.sh --root / \
+  --python-prefix /opt/python-3.11 \
+  --python-version 3.11
+```
+
+默认 `--python-mode link` 只建立指向 prefix 的槽。真正的多解释器需要自包含 prefix；`--python-mode copy` 仍是实验项。
+
+## 测试
+
+宿主上无 root 跑选择器/安装器测试：
+
+```bash
+./cbap-os/tests/run.sh
+```
+
+测试覆盖：
+
+```text
+版本目录发现
+CBAP/Python 同时切换
+只切 CBAP 时保留 Python
+开机重新挂载
+rollback
+非法/歧义版本拒绝
+安装器生成版本槽和 selection
+hand-present 条件
+```
+
+## 文件
+
+```text
+拼装.sh                 主底座构建；默认带 CBAP group
+加包.sh                 追加包；新增 CBAP group
+收尾F-CBAP-OS.sh        安装 CBAP OS runtime layer
+改名CBAP-OS.sh          CBAP OS 品牌化
+启动CBAP-OS.sh          启动 CBAP OS 镜像
+cbap-os/                CLI、systemd、安装器、测试
+  bin/cbap-os           版本选择/热切换
+  bin/cbap              当前 CBAP runner
+  bin/cbap-service      systemd 服务入口
+  install.sh            往 rootfs 安装
+  systemd/              选择、挂载、CBAP 服务单元
+  tests/                宿主级无 root 测试
+CBAP-OS-看这里.txt       给最终用户的操作说明
+```
+
+DSH OS 的原始脚本仍保留；CBAP OS 是在其上加层，不是把底座推倒重写。
+
+## 边界 / 诚实交代
+
+```text
+没有在真实 QEMU 里验证本次 CBAP 版本菜单
+没有做 TPM/签名/远程证明
+没有在切换时迁移正在执行的 CBAP lease
+默认 Python 槽链接系统 /usr/bin/python3，不是独立解释器
+旧 DSH OS 脚本和 dsh 用户名保留，避免破坏原底座
+没有预编译镜像；本仓库只放构建脚本和文档
+```
+
+这些不是“以后再说”的装饰，而是 CBAP OS 从脚本原型走向可发行系统前必须补的验证项。
+
+## 许可
+
+MIT。底座来自 DSH OS；CBAP 运行时来自
+[`cyberdyne-bridge`](https://github.com/cyberdyne-bridge/cyberdyne-bridge-agent-physical-protocol)。
+
+```text
 Copyright (c) 2026 BZYS17Mintstar (6750432)
 Generated with the assistance of AI (DeepSeek V4), guided by human architectural intuition.
 ```

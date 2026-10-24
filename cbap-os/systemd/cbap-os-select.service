@@ -1,0 +1,23 @@
+[Unit]
+Description=CBAP OS boot version selector
+Documentation=file:/opt/cbap-os/README.md
+DefaultDependencies=no
+After=local-fs.target
+Before=cbap-os-mount.service
+Conflicts=getty@tty1.service
+ConditionPathExists=/dev/tty1
+ConditionPathExists=!/run/cbap-os/boot-selected
+ConditionKernelCommandLine=!cbap.nomenu
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/cbap-os boot-menu --timeout 10
+StandardInput=tty
+StandardOutput=tty
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+TimeoutStartSec=45
+
+[Install]
+WantedBy=basic.target

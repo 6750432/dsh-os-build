@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Legacy DSH OS entrypoint. For CBAP OS use 启动CBAP-OS.sh / 改名CBAP-OS.sh.
 # 启动 DSH OS —— 从 Debian 手拼的整机系统
 #
 # 用法：  双击桌面上的「DSH OS」图标

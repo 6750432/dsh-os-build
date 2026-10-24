@@ -28,6 +28,9 @@ PKGS_BASE="ca-certificates,locales,tzdata,apt-utils,sudo,less,curl,wget,gnupg
 ,openssh-server,man-db,bash-completion,rsync,unzip,zip,pciutils,usbutils,inxi
 ,ntfs-3g,dosfstools,needrestart,zram-tools,lm-sensors,systemd-sysv,systemd
 ,kmod,iproute2,e2fsprogs"
+# CBAP OS runtime: Python + git (version slots) + small selection UI.
+PKGS_CBAP="python3,python3-venv,python3-pip,git,whiptail,jq,util-linux
+,mount,ca-certificates"
 PKGS_KERNEL="linux-image-amd64,linux-headers-amd64,initramfs-tools,firmware-linux
 ,firmware-iwlwifi,firmware-misc-nonfree"
 PKGS_DISPLAY="xserver-xorg,xserver-xorg-video-nouveau,xserver-xorg-video-vesa
@@ -57,9 +60,9 @@ PKGS_WINVM="qemu-system-x86,qemu-utils,libvirt-daemon-system,libvirt-clients
 ,gir1.2-spiceclientgtk-3.0,bridge-utils,dnsmasq-base,libosinfo-bin"
 
 # 要装哪几组：用环境变量 SELECT 挑，默认只装最底那层
-SELECT="${SELECT:-BASE}"
+SELECT="${SELECT:-BASE,CBAP}"
 INCLUDE="$PKGS_BASE"
-for g in KERNEL DISPLAY DESKTOP TWEAK CJK AV DEV OURS WINVM; do
+for g in KERNEL DISPLAY DESKTOP TWEAK CJK AV DEV OURS WINVM CBAP; do
     case ",$SELECT," in *",$g,"*) eval "INCLUDE=\"\$INCLUDE,\$PKGS_$g\"" ;; esac
 done
 INCLUDE="$(echo "$INCLUDE" | tr -d '\n' | sed 's/,,*/,/g')"
@@ -71,6 +74,7 @@ echo "════ 拼装开始 $(date '+%F %T') ════"
 echo "  套件   $SUITE"
 echo "  输出   $OUT"
 echo "  组     $SELECT"
+echo "  CBAP OS 默认带 Python 3 + git + cbap-os 版本管理器"
 echo "  包     $(echo "$INCLUDE" | tr ',' '\n' | grep -c .) 个"
 echo
 

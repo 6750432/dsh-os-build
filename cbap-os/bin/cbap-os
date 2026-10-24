@@ -1,0 +1,534 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""CBAP OS version manager.
+
+This is intentionally dependency-free (Python stdlib only) because it is the
+thing that chooses which Python runtime CBAP itself will use.
+
+Production default:
+    /opt/cbap-os/versions/cbap/<version>   immutable source slots
+    /opt/cbap-os/versions/python/<version> self-contained runtime slots
+    /opt/cbap-os/current/{cbap,python}     bind-mounted active slots
+    /etc/cbap-os/selection.json             boot/current selection
+
+Tests can set CBAP_OS_ROOT to a temp directory and CBAP_OS_MOUNT_MODE=symlink.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import select as select_mod
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+VERSION = "0.1.0"
+NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")
+SYSTEMD_UNIT = "cbap.service"
+
+
+def root_path() -> Path:
+    return Path(os.environ.get("CBAP_OS_ROOT", "/")).resolve()
+
+
+def paths():
+    r = root_path()
+    return {
+        "root": r,
+        "versions": r / "opt/cbap-os/versions",
+        "current": r / "opt/cbap-os/current",
+        "etc": r / "etc/cbap-os",
+        "run": r / "run/cbap-os",
+        "state": r / "var/lib/cbap-os",
+        "selection": r / "etc/cbap-os/selection.json",
+        "previous": r / "var/lib/cbap-os/previous.json",
+        "mount_cbap": r / "opt/cbap-os/current/cbap",
+        "mount_python": r / "opt/cbap-os/current/python",
+    }
+
+
+def now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def read_json(path: Path, default=None):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return default
+
+
+def atomic_json(path: Path, value) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=path.name + ".", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(value, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, path)
+    finally:
+        try:
+            os.unlink(tmp)
+        except FileNotFoundError:
+            pass
+
+
+def die(msg: str, code: int = 2):
+    print(f"cbap-os: {msg}", file=sys.stderr)
+    raise SystemExit(code)
+
+
+def catalog(kind: str) -> list[dict]:
+    base = paths()["versions"] / kind
+    out = []
+    if not base.is_dir():
+        return out
+    for child in sorted(base.iterdir(), key=lambda p: p.name):
+        if not child.is_dir() or child.name.startswith("."):
+            continue
+        if not NAME_RE.match(child.name):
+            continue
+        manifest = read_json(child / "manifest.json", {}) or {}
+        if kind == "python":
+            exe = child / "bin/python3"
+            if not exe.exists():
+                exe = child / "bin/python"
+            if not exe.exists():
+                continue
+            out.append({
+                "kind": kind, "version": child.name, "path": str(child),
+                "executable": str(exe),
+                "python": manifest.get("python", child.name),
+                "source": manifest.get("source", "slot"),
+            })
+        else:
+            if not (child / "kernel").is_dir():
+                continue
+            out.append({
+                "kind": kind, "version": child.name, "path": str(child),
+                "python_min": manifest.get("python_min", "3.10"),
+                "source": manifest.get("source", "slot"),
+            })
+    return out
+
+
+def find_version(kind: str, wanted: str | None, current: str | None = None) -> dict:
+    items = catalog(kind)
+    if not items:
+        die(f"no {kind} versions installed under {paths()['versions'] / kind}")
+    if not wanted:
+        if current:
+            for item in items:
+                if item["version"] == current:
+                    return item
+        return items[-1]
+    if not NAME_RE.match(wanted):
+        die(f"invalid {kind} version name: {wanted!r}")
+    exact = [x for x in items if x["version"] == wanted]
+    if exact:
+        return exact[0]
+    pref = [x for x in items if x["version"].startswith(wanted)]
+    if len(pref) == 1:
+        return pref[0]
+    if len(pref) > 1:
+        die(f"ambiguous {kind} version {wanted!r}: {', '.join(x['version'] for x in pref)}")
+    die(f"{kind} version not installed: {wanted} (have: {', '.join(x['version'] for x in items)})")
+    raise AssertionError
+
+
+def selection() -> dict:
+    p = paths()
+    data = read_json(p["selection"], {}) or {}
+    cbaps = catalog("cbap")
+    pythons = catalog("python")
+    cbap_names = {x["version"] for x in cbaps}
+    py_names = {x["version"] for x in pythons}
+    cbap = data.get("cbap") if data.get("cbap") in cbap_names else (cbaps[-1]["version"] if cbaps else None)
+    py = data.get("python") if data.get("python") in py_names else (pythons[-1]["version"] if pythons else None)
+    return {
+        "cbap": cbap,
+        "python": py,
+        "source": data.get("source", "default"),
+        "updated_at": data.get("updated_at"),
+    }
+
+
+def write_selection(cbap: str, py: str, source: str) -> None:
+    atomic_json(paths()["selection"], {
+        "cbap": cbap,
+        "python": py,
+        "source": source,
+        "updated_at": now(),
+    })
+
+
+def mount_mode(requested: str | None) -> str:
+    mode = requested or os.environ.get("CBAP_OS_MOUNT_MODE", "bind")
+    if mode not in ("bind", "symlink"):
+        die(f"invalid mount mode: {mode}")
+    return mode
+
+
+def is_mounted(target: Path) -> bool:
+    try:
+        target_s = str(target.resolve())
+        for line in Path("/proc/self/mounts").read_text(encoding="utf-8", errors="replace").splitlines():
+            parts = line.split()
+            if len(parts) >= 2 and parts[1] == target_s:
+                return True
+    except OSError:
+        pass
+    return False
+
+
+def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd, text=True, capture_output=True, check=check)
+
+
+def unmount(target: Path, dry_run: bool = False) -> None:
+    if not is_mounted(target):
+        return
+    if dry_run:
+        print(f"[dry-run] umount {target}")
+        return
+    res = run(["umount", str(target)], check=False)
+    if res.returncode != 0:
+        res = run(["umount", "-l", str(target)], check=False)
+    if res.returncode != 0:
+        die(f"cannot unmount {target}: {res.stderr.strip()}")
+
+
+def switch_mount(kind: str, src: Path, target: Path, mode: str, dry_run: bool) -> None:
+    if dry_run:
+        print(f"[dry-run] {mode} {kind}: {src} -> {target}")
+        return
+    if mode == "symlink":
+        if target.is_symlink() or target.is_file():
+            target.unlink()
+        elif target.is_dir() and any(target.iterdir()):
+            die(f"mount point is not empty: {target}")
+        elif target.is_dir():
+            target.rmdir()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        os.symlink(src, target)
+        return
+    if os.geteuid() != 0:
+        die("bind mount requires root; use sudo or CBAP_OS_MOUNT_MODE=symlink")
+    target.mkdir(parents=True, exist_ok=True)
+    unmount(target, dry_run=False)
+    res = run(["mount", "--bind", str(src), str(target)], check=False)
+    if res.returncode != 0:
+        die(f"mount --bind failed: {res.stderr.strip()}")
+
+
+def systemd_available() -> bool:
+    if os.environ.get("CBAP_OS_NO_SYSTEMD") == "1":
+        return False
+    return shutil.which("systemctl") is not None
+
+
+def service_active() -> bool:
+    if not systemd_available():
+        return False
+    return run(["systemctl", "is-active", "--quiet", SYSTEMD_UNIT], check=False).returncode == 0
+
+
+def service_control(action: str) -> None:
+    if not systemd_available():
+        return
+    res = run(["systemctl", action, SYSTEMD_UNIT], check=False)
+    if res.returncode != 0:
+        die(f"systemctl {action} {SYSTEMD_UNIT} failed: {res.stderr.strip()}")
+
+
+def current_source(kind: str) -> str | None:
+    target = paths()["mount_cbap" if kind == "cbap" else "mount_python"]
+    if is_mounted(target):
+        try:
+            for line in Path("/proc/self/mounts").read_text(encoding="utf-8", errors="replace").splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and parts[1] == str(target.resolve()):
+                    return parts[0]
+        except OSError:
+            return None
+    if target.is_symlink():
+        return str(target.resolve())
+    return None
+
+
+def apply(versions: dict, mode: str, dry_run: bool, no_restart: bool,
+          start: bool = False) -> dict:
+    p = paths()
+    old = selection()
+    old_cbap, old_py = old.get("cbap"), old.get("python")
+    cbap = versions.get("cbap") or old_cbap
+    py = versions.get("python") or old_py
+    cbap_item = find_version("cbap", cbap, old_cbap)
+    py_item = find_version("python", py, old_py)
+    was_active = service_active()
+    changed = cbap != old_cbap or py != old_py
+    # A reboot starts with empty current/ directories. Selection being
+    # unchanged must not skip the initial mount.
+    want_cbap = str(Path(cbap_item["path"]).resolve())
+    want_py = str(Path(py_item["path"]).resolve())
+    need_mount = current_source("cbap") != want_cbap or current_source("python") != want_py
+    if dry_run:
+        print(f"[dry-run] select cbap={cbap_item['version']} python={py_item['version']} "
+              f"mode={mode} service_active={was_active}")
+        switch_mount("cbap", Path(cbap_item["path"]), p["mount_cbap"], mode, True)
+        switch_mount("python", Path(py_item["path"]), p["mount_python"], mode, True)
+        return {"cbap": cbap_item["version"], "python": py_item["version"], "dry_run": True}
+    if not changed and not need_mount and not start:
+        print(f"already selected: cbap={cbap_item['version']} python={py_item['version']}")
+        return {"cbap": cbap_item["version"], "python": py_item["version"], "changed": False}
+    if was_active and not no_restart:
+        service_control("stop")
+    try:
+        switch_mount("cbap", Path(cbap_item["path"]), p["mount_cbap"], mode, False)
+        switch_mount("python", Path(py_item["path"]), p["mount_python"], mode, False)
+        write_selection(cbap_item["version"], py_item["version"], "cli")
+        if changed:
+            atomic_json(p["previous"], {"cbap": old_cbap, "python": old_py, "at": now()})
+        if (was_active or start) and not no_restart:
+            service_control("start")
+    except BaseException:
+        # best effort rollback of mounts and selection
+        try:
+            if old_cbap and old_py:
+                oc = find_version("cbap", old_cbap, old_cbap)
+                op = find_version("python", old_py, old_py)
+                switch_mount("cbap", Path(oc["path"]), p["mount_cbap"], mode, False)
+                switch_mount("python", Path(op["path"]), p["mount_python"], mode, False)
+                write_selection(old_cbap, old_py, old.get("source", "rollback"))
+        except BaseException:
+            pass
+        try:
+            if was_active and not no_restart:
+                service_control("start")
+        except BaseException:
+            pass
+        raise
+    return {"cbap": cbap_item["version"], "python": py_item["version"], "changed": changed}
+
+
+def cmd_list(args) -> int:
+    if args.json:
+        print(json.dumps({"cbap": catalog("cbap"), "python": catalog("python")},
+                         ensure_ascii=False, indent=2))
+        return 0
+    for kind in ("cbap", "python"):
+        print(f"{kind}:")
+        for item in catalog(kind):
+            print(f"  {item['version']:<16} {item['path']}")
+    return 0
+
+
+def cmd_status(args) -> int:
+    p = paths()
+    data = {
+        "selection": selection(),
+        "mounts": {
+            "cbap": current_source("cbap"),
+            "python": current_source("python"),
+        },
+        "service": "active" if service_active() else "inactive",
+        "mount_mode": mount_mode(None),
+        "paths": {k: str(v) for k, v in p.items() if k in ("versions", "current", "selection")},
+    }
+    if args.json:
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+    else:
+        print(f"CBAP OS       {VERSION}")
+        print(f"CBAP          {data['selection'].get('cbap')}  -> {data['mounts']['cbap'] or '-'}")
+        print(f"Python        {data['selection'].get('python')}  -> {data['mounts']['python'] or '-'}")
+        print(f"service       {data['service']}")
+        print(f"mount mode    {data['mount_mode']}")
+    return 0
+
+
+def cmd_use(args) -> int:
+    if not args.cbap and not args.python:
+        die("use requires --cbap and/or --python")
+    mode = mount_mode(args.mount_mode)
+    result = apply({"cbap": args.cbap, "python": args.python}, mode,
+                   args.dry_run, args.no_restart, start=args.start)
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+def cmd_boot(args) -> int:
+    # Kernel cmdline is useful for headless/serial images; it wins over the
+    # persisted selection, but an explicit CLI argument wins over both.
+    cmdline = {}
+    try:
+        for token in Path("/proc/cmdline").read_text(encoding="utf-8").split():
+            if token.startswith("cbap.cbap="):
+                cmdline["cbap"] = token.split("=", 1)[1]
+            elif token.startswith("cbap.python="):
+                cmdline["python"] = token.split("=", 1)[1]
+    except OSError:
+        pass
+    cur = selection()
+    versions = {
+        "cbap": args.cbap or cmdline.get("cbap") or cur.get("cbap"),
+        "python": args.python or cmdline.get("python") or cur.get("python"),
+    }
+    result = apply(versions, mount_mode(args.mount_mode), args.dry_run,
+                   no_restart=True, start=False)
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+def choose(prompt: str, items: list[dict], default: str, timeout: int) -> str:
+    print()
+    print(prompt)
+    for i, item in enumerate(items, 1):
+        mark = "*" if item["version"] == default else " "
+        print(f"  {mark} [{i}] {item['version']}")
+    print(f"  default [{default}]  (timeout {timeout}s)")
+    if not sys.stdin.isatty() or timeout <= 0:
+        return default
+    ready, _, _ = select_mod.select([sys.stdin], [], [], timeout)
+    if not ready:
+        print("  timeout; using default")
+        return default
+    line = sys.stdin.readline().strip()
+    if not line:
+        return default
+    if line.isdigit():
+        idx = int(line) - 1
+        if 0 <= idx < len(items):
+            return items[idx]["version"]
+    for item in items:
+        if item["version"] == line:
+            return item["version"]
+    print("  invalid choice; using default")
+    return default
+
+
+def cmd_boot_menu(args) -> int:
+    cbaps = catalog("cbap")
+    pythons = catalog("python")
+    if not cbaps or not pythons:
+        die("cannot boot: cbap and python slots are both required")
+    cur = selection()
+    default_cbap = cur.get("cbap") or cbaps[-1]["version"]
+    default_py = cur.get("python") or pythons[-1]["version"]
+    if args.noninteractive:
+        cbap, py = default_cbap, default_py
+    else:
+        cbap = choose("CBAP version:", cbaps, default_cbap, args.timeout)
+        py = choose("Python runtime:", pythons, default_py, args.timeout)
+    write_selection(cbap, py, "boot-menu")
+    print(f"selected cbap={cbap} python={py}")
+    return 0
+
+
+def cmd_rollback(args) -> int:
+    p = paths()
+    old = read_json(p["previous"], {}) or {}
+    if not old.get("cbap") or not old.get("python"):
+        die("no previous selection to roll back to")
+    result = apply({"cbap": old["cbap"], "python": old["python"]},
+                   mount_mode(args.mount_mode), args.dry_run,
+                   args.no_restart, start=args.start)
+    print(json.dumps(result, ensure_ascii=False))
+    return 0
+
+
+def cmd_doctor(args) -> int:
+    problems = []
+    if not (paths()["versions"] / "cbap").is_dir():
+        problems.append("missing cbap versions directory")
+    if not (paths()["versions"] / "python").is_dir():
+        problems.append("missing python versions directory")
+    if not catalog("cbap"):
+        problems.append("no cbap versions installed")
+    if not catalog("python"):
+        problems.append("no python versions installed")
+    try:
+        data = selection()
+        if data.get("cbap") and data.get("python"):
+            print(f"selection ok: cbap={data['cbap']} python={data['python']}")
+    except SystemExit:
+        problems.append("invalid selection")
+    if problems:
+        for x in problems:
+            print(f"FAIL {x}")
+        return 1
+    print("doctor: ok")
+    return 0
+
+
+def cmd_hand_present(args) -> int:
+    path = Path(os.environ.get("CBAP_HAND_SOCKET", "/run/cyberdyne/cyberdyne.sock"))
+    return 0 if path.exists() else 1
+
+
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="cbap-os", description=f"CBAP OS {VERSION}")
+    ap.add_argument("--json", action="store_true", help="JSON output where supported")
+    sub = ap.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("list", help="list installed version slots")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_list)
+
+    p = sub.add_parser("status", help="show selection, mounts and service")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_status)
+
+    p = sub.add_parser("use", help="hot-swap CBAP/Python without rebooting")
+    p.add_argument("--cbap")
+    p.add_argument("--python")
+    p.add_argument("--mount-mode", choices=("bind", "symlink"))
+    p.add_argument("--no-restart", action="store_true")
+    p.add_argument("--start", action="store_true", help="start service even if it was inactive")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_use)
+
+    p = sub.add_parser("boot", help="mount selection (systemd boot helper)")
+    p.add_argument("--cbap")
+    p.add_argument("--python")
+    p.add_argument("--mount-mode", choices=("bind", "symlink"))
+    p.add_argument("--mount-only", action="store_true",
+                   help="compatibility flag; boot always only mounts")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_boot)
+
+    p = sub.add_parser("boot-menu", help="interactive boot selector")
+    p.add_argument("--timeout", type=int, default=10)
+    p.add_argument("--noninteractive", action="store_true")
+    p.set_defaults(func=cmd_boot_menu)
+
+    p = sub.add_parser("rollback", help="return to the previous selection")
+    p.add_argument("--mount-mode", choices=("bind", "symlink"))
+    p.add_argument("--no-restart", action="store_true")
+    p.add_argument("--start", action="store_true")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_rollback)
+
+    p = sub.add_parser("doctor", help="check slots and selection")
+    p.set_defaults(func=cmd_doctor)
+
+    p = sub.add_parser("hand-present", help="exit 0 if the configured hand exists")
+    p.set_defaults(func=cmd_hand_present)
+    return ap
+
+
+def main(argv=None) -> int:
+    ap = build_parser()
+    args = ap.parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

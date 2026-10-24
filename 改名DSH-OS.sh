@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Legacy DSH OS entrypoint. For CBAP OS use 启动CBAP-OS.sh / 改名CBAP-OS.sh.
 # 把拼装出来的系统从 mili 改名为 DSH OS
 #
 # 全程只在 ~/拼装/构建/kernel-rootfs 里改文件 —— 不需要 root、不碰宿主。
