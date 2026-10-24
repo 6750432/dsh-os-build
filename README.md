@@ -274,7 +274,14 @@ Apply hot-swap（pkexec）
 Host Bridge Test（写宿主机 allowlist）
 ```
 
-Host Bridge 现在暴露 5 个 CBAP device_id：
+Host Bridge 现在走主仓的 P0–P6 设备契约（默认拒绝、逐设备配额、trust facts、
+safe_state、portal 输入）：
+
+```text
+cyberdyne-bridge/docs/DEVICE-PARITY.md
+```
+
+当前暴露 5 个 CBAP device_id：
 
 ```text
 host://desktop         filesystem compatibility
@@ -285,7 +292,13 @@ host://input/keyboard  opt-in X11/XWayland keyboard
 ```
 
 输入默认关闭；宿主机启动 bridge 时显式加 `--enable-input` 才会打开。
-原生 Wayland 键鼠注入尚未实现，当前输入后端是 X11/XWayland。
+X11/XWayland 后端是兼容路径；native Wayland 使用：
+
+```bash
+--enable-input --input-backend portal --require-isolated-input
+```
+
+portal 会弹 compositor 授权框；没有 root/uinput。
 
 Host Bridge 的安全测试说明在主仓：
 
