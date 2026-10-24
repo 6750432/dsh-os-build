@@ -65,6 +65,16 @@ tty1 菜单内容示例：
 宿主机侧要先跑主仓的 tools/cbap_host_bridge.py，并且只绑定 127.0.0.1；
 QEMU 用户网络里的 guest 通过 10.0.2.2:18765 访问。
 
+现在暴露的 device_id：
+
+    host://desktop / host://fs
+    host://display
+    host://input/mouse
+    host://input/keyboard
+
+鼠标/键盘默认关闭；宿主机 bridge 显式加 --enable-input 才打开。
+当前输入后端是 X11/XWayland，不是 native Wayland。
+
 【CBAP 命令】
 
     cbap --help

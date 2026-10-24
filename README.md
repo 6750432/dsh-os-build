@@ -274,6 +274,19 @@ Apply hot-swap（pkexec）
 Host Bridge Test（写宿主机 allowlist）
 ```
 
+Host Bridge 现在暴露 5 个 CBAP device_id：
+
+```text
+host://desktop         filesystem compatibility
+host://fs              allowlisted filesystem
+host://display         Wayland screenshot
+host://input/mouse     opt-in X11/XWayland pointer
+host://input/keyboard  opt-in X11/XWayland keyboard
+```
+
+输入默认关闭；宿主机启动 bridge 时显式加 `--enable-input` 才会打开。
+原生 Wayland 键鼠注入尚未实现，当前输入后端是 X11/XWayland。
+
 Host Bridge 的安全测试说明在主仓：
 
 ```text
