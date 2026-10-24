@@ -134,6 +134,27 @@ For true independent Python runtimes, provide a self-contained prefix. The
 optional `--python-mode copy` is experimental because CPython's compiled
 prefix is not relocatable without care.
 
+## Live ISO
+
+`iso/build-iso.sh` builds a bootable BIOS+UEFI live ISO without root:
+
+```bash
+bash cbap-os/iso/build-iso.sh \
+  --rootfs ~/拼装/构建/kernel-rootfs \
+  --cbap-src ~/cyberdyne-bridge \
+  --output ~/拼装/构建/CBAP-OS.iso
+```
+
+It uses a minimal busybox initramfs, a squashfs lower layer and a tmpfs
+overlay, so the ISO does not depend on the `live-boot` package.
+
+Requirements: `mtools`, `grub-pc-bin`, `grub-efi-amd64-bin`, `xorriso`,
+`squashfs-tools`, `cpio`, `busybox-static`.
+
+The built ISO is not committed. The first local build was 1.8G and was
+checked with `xorriso` for BIOS+UEFI El Torito entries, but was **not** booted
+in QEMU in this environment.
+
 ## Tests
 
 ```bash

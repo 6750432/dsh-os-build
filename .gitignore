@@ -11,3 +11,4 @@ output/
 *.img
 *.onnx
 *.gguf
+*.iso

@@ -184,6 +184,53 @@ sudo bash cbap-os/install.sh --root / \
 
 默认 `--python-mode link` 只建立指向 prefix 的槽。真正的多解释器需要自包含 prefix；`--python-mode copy` 仍是实验项。
 
+## ISO
+
+仓库现在带 **可启动 live ISO 构建器**：
+
+```bash
+bash cbap-os/iso/build-iso.sh \
+  --rootfs "$HOME/拼装/构建/kernel-rootfs" \
+  --cbap-src /path/to/cyberdyne-bridge \
+  --output "$HOME/拼装/构建/CBAP-OS.iso"
+```
+
+依赖：
+
+```text
+mtools
+grub-pc-bin
+grub-efi-amd64-bin
+xorriso
+squashfs-tools
+cpio
+busybox-static
+```
+
+ISO 结构：
+
+```text
+/boot/vmlinuz
+/boot/initrd.img
+/boot/grub/grub.cfg
+/casper/filesystem.squashfs
+```
+
+启动链：
+
+```text
+GRUB -> vmlinuz + 最小 busybox initramfs
+     -> 找 /casper/filesystem.squashfs
+     -> squashfs 只读 lower + tmpfs upper overlay
+     -> switch_root /sbin/init
+```
+
+这不需要 `live-boot` 包，也不把 4G rootfs 直接塞进 ISO 的 ext4；
+rootfs 在 ISO 里是压缩 squashfs。
+
+**当前已生成过一张 1.8G 的本地测试 ISO**，但没有在 QEMU 里回启动验证。
+ISO 不入库（`.gitignore` 排除 `*.iso`）。
+
 ## 测试
 
 宿主上无 root 跑选择器/安装器测试：
@@ -219,6 +266,7 @@ cbap-os/                CLI、systemd、安装器、测试
   bin/cbap-service      systemd 服务入口
   install.sh            往 rootfs 安装
   systemd/              选择、挂载、CBAP 服务单元
+  iso/                  live ISO（GRUB + squashfs + 自定义 initramfs）
   tests/                宿主级无 root 测试
 CBAP-OS-看这里.txt       给最终用户的操作说明
 ```

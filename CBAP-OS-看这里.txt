@@ -68,6 +68,18 @@ tty1 会出现：
 
 没有 hand 时服务被跳过，不会把系统拖进 failed。
 
+【ISO】
+
+带 GRUB 的 live ISO 构建：
+
+    bash cbap-os/iso/build-iso.sh \
+      --rootfs ~/拼装/构建/kernel-rootfs \
+      --cbap-src ~/cyberdyne-bridge \
+      --output ~/拼装/构建/CBAP-OS.iso
+
+需要 mtools、grub-pc-bin、grub-efi-amd64-bin、xorriso、squashfs-tools、
+cpio。启动后是 squashfs 只读 lower + tmpfs upper overlay。
+
 【登录信息】
 
     普通用户    dsh / dsh

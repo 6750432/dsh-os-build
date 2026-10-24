@@ -131,7 +131,7 @@ if [ -z "$PYTHON_VERSION" ]; then
         PYTHON_VERSION="$("$SRC_PY" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || true)"
     else
         # Prefer the target's stdlib directory for the default /usr slot.
-        PYTHON_VERSION="$(ls -d "$ROOT"/usr/lib/python3.* 2>/dev/null | sed -n 's|.*/python3\.||p' | sort -V | tail -1 || true)"
+        PYTHON_VERSION="$(ls -d "$ROOT"/usr/lib/python3.* 2>/dev/null | xargs -r -n1 basename 2>/dev/null | sed 's/^python//' | sort -V | tail -1 || true)"
     fi
 fi
 if [ -z "$PYTHON_VERSION" ]; then

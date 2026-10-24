@@ -1,0 +1,60 @@
+#!/bin/busybox sh
+# CBAP OS live ISO initramfs.
+# Finds the ISO, mounts its squashfs as a read-only lower layer, and uses a
+# tmpfs overlay so the live system can still write /etc, /var and /run.
+set -eu
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export HOME=/root
+
+say() { echo "[cbap-os] $*" > /dev/console; }
+rescue() {
+    say "$*"
+    say "dropping to a rescue shell"
+    exec /bin/sh
+}
+
+mount -t proc proc /proc 2>/dev/null || true
+mount -t sysfs sysfs /sys 2>/dev/null || true
+mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
+mkdir -p /run /tmp /cdrom /lower /upper /newroot
+
+say "probing for the CBAP OS ISO"
+found=""
+for dev in /dev/sr* /dev/sd* /dev/vd*; do
+    [ -b "$dev" ] || continue
+    mkdir -p /cdrom
+    if mount -o ro "$dev" /cdrom 2>/dev/null; then
+        if [ -f /cdrom/casper/filesystem.squashfs ]; then
+            found="$dev"
+            break
+        fi
+        umount /cdrom 2>/dev/null || true
+    fi
+done
+[ -n "$found" ] || rescue "cannot find casper/filesystem.squashfs on any block device"
+
+say "ISO device: $found"
+# These are normally built into the Debian kernel, but loading them explicitly
+# makes the ISO work with a trimmed kernel too.
+modprobe loop 2>/dev/null || true
+modprobe squashfs 2>/dev/null || true
+modprobe overlay 2>/dev/null || true
+
+mount -t squashfs -o loop,ro /cdrom/casper/filesystem.squashfs /lower \
+    || rescue "cannot mount squashfs"
+
+mount -t tmpfs -o mode=0755,size=2G tmpfs /upper \
+    || rescue "cannot create writable overlay tmpfs"
+mkdir -p /upper/upper /upper/work
+mount -t overlay overlay \
+    -o lowerdir=/lower,upperdir=/upper/upper,workdir=/upper/work \
+    /newroot || rescue "cannot mount overlay"
+
+mkdir -p /newroot/proc /newroot/sys /newroot/dev /newroot/run
+mount --move /proc /newroot/proc 2>/dev/null || true
+mount --move /sys /newroot/sys 2>/dev/null || true
+mount --move /dev /newroot/dev 2>/dev/null || true
+mount --move /run /newroot/run 2>/dev/null || true
+
+say "switching to CBAP OS root"
+exec switch_root /newroot /sbin/init
