@@ -134,6 +134,22 @@ For true independent Python runtimes, provide a self-contained prefix. The
 optional `--python-mode copy` is experimental because CPython's compiled
 prefix is not relocatable without care.
 
+## Control Center and host bridge
+
+`/usr/local/bin/cbap-control` is a Tkinter UI for the selected versions and a
+host-bridge test. It is installed as a desktop launcher.
+
+The host bridge lives in the main CBAP repository:
+
+```text
+cyberdyne-bridge/tools/cbap_host_bridge.py
+cyberdyne-bridge/drivers/host_desktop/driver.py
+```
+
+It exposes only `host://desktop` with `write_file`, `list`, `stat`, `ping`
+under `~/Desktop/CBAP-Host-Test`. No shell. QEMU user networking reaches it at
+`10.0.2.2:18765`; the bridge binds `127.0.0.1` only.
+
 ## Live ISO
 
 `iso/build-iso.sh` builds a bootable BIOS+UEFI live ISO without root:

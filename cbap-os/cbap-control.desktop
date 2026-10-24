@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=CBAP Control Center
+Comment=CBAP version slots and host bridge test
+Exec=/usr/local/bin/cbap-control
+Icon=/usr/share/backgrounds/cbap-os.png
+Terminal=false
+Categories=System;Settings;

@@ -1,0 +1,216 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""CBAP Control Center — small local Tk UI for the CBAP OS runtime layer."""
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+import sys
+import threading
+from pathlib import Path
+
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+BG = "#070a0f"
+PANEL = "#0d141d"
+LINE = "#1f3a3a"
+TEXT = "#e8eef4"
+MUTED = "#93a2b1"
+TEAL = "#5eead4"
+AMBER = "#f3c969"
+RED = "#ff8585"
+MONO = ("DejaVu Sans Mono", 10)
+SANS = ("DejaVu Sans", 10)
+
+VERSIONS = Path("/opt/cbap-os/versions")
+CURRENT = Path("/opt/cbap-os/current")
+SELECTION = Path("/etc/cbap-os/selection.json")
+HOST_CFG = Path("/etc/cbap-os/host-test.json")
+
+
+def read_json(path: Path, default=None):
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return default
+
+
+def versions(kind: str) -> list[str]:
+    base = VERSIONS / kind
+    if not base.is_dir():
+        return []
+    return sorted([p.name for p in base.iterdir() if p.is_dir()], reverse=True)
+
+
+def selection() -> dict:
+    return read_json(SELECTION, {}) or {}
+
+
+class App:
+    def __init__(self, root: tk.Tk):
+        self.root = root
+        root.title("CBAP Control Center")
+        root.geometry("820x560")
+        root.configure(bg=BG)
+        root.minsize(720, 500)
+        self._build()
+        self.refresh()
+
+    def _build(self):
+        head = tk.Frame(self.root, bg=BG)
+        head.pack(fill="x", padx=30, pady=(24, 10))
+        tk.Label(head, text="CYBERDYNE / BRIDGE", bg=BG, fg=TEAL,
+                 font=("DejaVu Sans Mono", 9)).pack(anchor="w")
+        tk.Label(head, text="CBAP OS", bg=BG, fg=TEXT,
+                 font=("DejaVu Sans", 32, "bold")).pack(anchor="w", pady=(4, 0))
+        tk.Label(head, text="VERSIONED RUNTIME  ·  TRUST BOUNDARY  ·  HOST BRIDGE",
+                 bg=BG, fg=MUTED, font=("DejaVu Sans Mono", 9)).pack(anchor="w", pady=(2, 0))
+        tk.Frame(self.root, bg=TEAL, height=1).pack(fill="x", padx=30, pady=16)
+
+        body = tk.Frame(self.root, bg=BG)
+        body.pack(fill="both", expand=True, padx=30)
+
+        left = tk.Frame(body, bg=PANEL, highlightbackground=LINE, highlightthickness=1)
+        left.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        right = tk.Frame(body, bg=PANEL, highlightbackground=LINE, highlightthickness=1)
+        right.pack(side="right", fill="both", expand=True, padx=(10, 0))
+
+        tk.Label(left, text="RUNTIME SLOTS", bg=PANEL, fg=TEAL,
+                 font=("DejaVu Sans Mono", 9)).pack(anchor="w", padx=16, pady=(14, 8))
+
+        self.cbap_var = tk.StringVar()
+        self.py_var = tk.StringVar()
+        self._combo(left, "CBAP", self.cbap_var, 0)
+        self._combo(left, "Python", self.py_var, 1)
+
+        row = tk.Frame(left, bg=PANEL)
+        row.pack(fill="x", padx=16, pady=(18, 8))
+        self._button(row, "Apply hot-swap", self.apply, TEAL, BG).pack(side="left")
+        self._button(row, "Refresh", self.refresh, MUTED, PANEL).pack(side="left", padx=8)
+
+        self.state = tk.Label(left, text="", bg=PANEL, fg=MUTED,
+                              font=("DejaVu Sans Mono", 9), justify="left")
+        self.state.pack(anchor="w", padx=16, pady=(8, 16))
+
+        tk.Label(right, text="HOST BRIDGE TEST", bg=PANEL, fg=TEAL,
+                 font=("DejaVu Sans Mono", 9)).pack(anchor="w", padx=16, pady=(14, 8))
+        tk.Label(right, text="Writes only inside the host allowlist:\n~/Desktop/CBAP-Host-Test",
+                 bg=PANEL, fg=MUTED, font=("DejaVu Sans", 9), justify="left").pack(anchor="w", padx=16)
+        self._button(right, "Create safe host file", self.host_test, AMBER, BG).pack(anchor="w", padx=16, pady=14)
+
+        self.log = tk.Text(right, height=10, bg="#060b10", fg=TEXT, insertbackground=TEAL,
+                           relief="flat", font=("DejaVu Sans Mono", 9), wrap="word")
+        self.log.pack(fill="both", expand=True, padx=16, pady=(0, 16))
+
+        tk.Frame(self.root, bg=BG, height=14).pack(fill="x")
+
+    def _combo(self, parent, label, var, row):
+        # This frame uses pack; never mix pack and grid in the same parent.
+        line = tk.Frame(parent, bg=PANEL)
+        line.pack(fill="x", padx=16, pady=6)
+        tk.Label(line, text=label, bg=PANEL, fg=TEXT, font=SANS, width=8,
+                 anchor="w").pack(side="left")
+        cb = ttk.Combobox(line, textvariable=var, state="readonly", width=20)
+        cb.pack(side="left", fill="x", expand=True)
+        setattr(self, f"{label.lower()}_combo", cb)
+
+    def _button(self, parent, text, cmd, fg, bg):
+        b = tk.Button(parent, text=text, command=cmd, bg=bg, fg=fg,
+                      activebackground=TEAL, activeforeground=BG,
+                      relief="flat", padx=12, pady=7, font=("DejaVu Sans Mono", 9),
+                      highlightthickness=0, cursor="hand2")
+        return b
+
+    def refresh(self):
+        c = versions("cbap")
+        p = versions("python")
+        self.cbap_combo["values"] = c
+        self.python_combo["values"] = p
+        sel = selection()
+        if sel.get("cbap") in c:
+            self.cbap_var.set(sel["cbap"])
+        elif c:
+            self.cbap_var.set(c[0])
+        if sel.get("python") in p:
+            self.py_var.set(sel["python"])
+        elif p:
+            self.py_var.set(p[0])
+        self.state.config(
+            text=f"selected   cbap={sel.get('cbap','-')}  python={sel.get('python','-')}\n"
+                 f"source     {sel.get('source','-')}\n"
+                 f"cbap-os    {len(c)} slots · {len(p)} python runtimes")
+
+    def apply(self):
+        cbap = self.cbap_var.get()
+        py = self.py_var.get()
+        if not cbap or not py:
+            return
+        cmd = ["pkexec", "/usr/local/bin/cbap-os", "use",
+               "--cbap", cbap, "--python", py]
+        self.log.insert("end", f"$ {' '.join(cmd)}\n")
+        self.log.see("end")
+
+        def run():
+            try:
+                p = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+                out = (p.stdout or "") + (p.stderr or "")
+                self.root.after(0, lambda: self._done(out, p.returncode))
+            except Exception as e:
+                self.root.after(0, lambda: self._done(str(e), -1))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _done(self, out, rc):
+        self.log.insert("end", out + f"\nexit={rc}\n")
+        self.log.see("end")
+        self.refresh()
+
+    def host_test(self):
+        cfg = read_json(HOST_CFG, {}) or {}
+        host = cfg.get("host", "10.0.2.2")
+        port = int(cfg.get("port", 18765))
+        token = cfg.get("token", "")
+        self.log.insert("end", f"host test -> {host}:{port}\n")
+        self.log.see("end")
+
+        def run():
+            try:
+                sys.path.insert(0, "/opt/cbap-os/current/cbap")
+                from kernel.legacy_runtime.client import CBAPClient
+                c = CBAPClient(tcp_host=host, tcp_port=port, agent_id="cbap-control")
+                c.connect(timeout=3)
+                w = c.hello(token=token)
+                r = c.open("host://desktop", mode="exclusive")
+                fd = r["payload"]["fd"]
+                c.lease(fd, ttl_ms=30000)
+                _, _, res = c.write(fd, {
+                    "op": "write_file",
+                    "args": {"path": "from-control-center.txt",
+                             "content": "CBAP OS Control Center host test\n"},
+                })
+                _, _, st = c.write(fd, {"op": "stat", "args": {"path": "from-control-center.txt"}})
+                c.release(fd)
+                c.close()
+                msg = (f"kernel={w.get('kernel_id')}\nwrite_ok={res.get('ok')}\n"
+                       f"sha256={((st.get('facts') or {}).get('sha256'))}\n")
+                self.root.after(0, lambda: self._host_done(msg))
+            except Exception as e:
+                self.root.after(0, lambda: self._host_done(f"ERROR {type(e).__name__}: {e}\n"))
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _host_done(self, msg):
+        self.log.insert("end", msg)
+        self.log.see("end")
+
+
+def main():
+    root = tk.Tk()
+    App(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()

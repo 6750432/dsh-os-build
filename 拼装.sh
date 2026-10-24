@@ -29,7 +29,7 @@ PKGS_BASE="ca-certificates,locales,tzdata,apt-utils,sudo,less,curl,wget,gnupg
 ,ntfs-3g,dosfstools,needrestart,zram-tools,lm-sensors,systemd-sysv,systemd
 ,kmod,iproute2,e2fsprogs"
 # CBAP OS runtime: Python + git (version slots) + small selection UI.
-PKGS_CBAP="python3,python3-venv,python3-pip,git,whiptail,jq,util-linux
+PKGS_CBAP="python3,python3-venv,python3-pip,python3-tk,git,whiptail,jq,util-linux
 ,mount,ca-certificates"
 PKGS_KERNEL="linux-image-amd64,linux-headers-amd64,initramfs-tools,firmware-linux
 ,firmware-iwlwifi,firmware-misc-nonfree"

@@ -54,6 +54,17 @@ tty1 菜单内容示例：
 注意：Python 切换会重启 CBAP 进程；不是在一个已加载 libpython 的
 进程里原地换解释器。正在跑的 lease 不会跨切换迁移。
 
+【CBAP Control Center】
+
+桌面上的 CBAP Control Center 可以：
+
+    - 看当前 CBAP / Python
+    - Apply hot-swap 切换版本
+    - Host Bridge Test 写宿主机白名单目录
+
+宿主机侧要先跑主仓的 tools/cbap_host_bridge.py，并且只绑定 127.0.0.1；
+QEMU 用户网络里的 guest 通过 10.0.2.2:18765 访问。
+
 【CBAP 命令】
 
     cbap --help

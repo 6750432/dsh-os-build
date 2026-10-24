@@ -165,12 +165,20 @@ step "4/7 manager, wrappers and systemd units"
 install -m 0755 "$HERE/bin/cbap-os" "$ROOT/usr/local/bin/cbap-os"
 install -m 0755 "$HERE/bin/cbap" "$ROOT/usr/local/bin/cbap"
 install -m 0755 "$HERE/bin/cbap-service" "$ROOT/usr/local/bin/cbap-service"
+install -m 0755 "$HERE/bin/cbap-control" "$ROOT/usr/local/bin/cbap-control"
 cat > "$ROOT/usr/local/bin/cbap-python" <<'EOF'
 #!/bin/sh
 exec /opt/cbap-os/current/python/bin/python3 "$@"
 EOF
 chmod 0755 "$ROOT/usr/local/bin/cbap-python"
 install -m 0644 "$HERE/etc/runtime.env" "$ROOT/etc/cbap-os/runtime.env"
+install -m 0644 "$HERE/etc/host-test.json" "$ROOT/etc/cbap-os/host-test.json"
+install -d -m 0755 "$ROOT/usr/share/applications"
+install -m 0644 "$HERE/cbap-control.desktop" "$ROOT/usr/share/applications/cbap-control.desktop"
+if [ -d "$ROOT/home/dsh" ]; then
+    install -d -m 0755 "$ROOT/home/dsh/Desktop"
+    install -m 0755 "$HERE/cbap-control.desktop" "$ROOT/home/dsh/Desktop/cbap-control.desktop"
+fi
 cat > "$ROOT/etc/profile.d/cbap-os.sh" <<'EOF'
 # CBAP OS: make the selected runtime explicit, but do not silently replace
 # the distribution's /usr/bin/python3 (apt and system tools still need it).

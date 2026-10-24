@@ -261,6 +261,25 @@ Python 3.13
 
 ![CBAP OS 桌面](docs/screenshots/cbap-os-desktop.png)
 
+### CBAP Control Center
+
+桌面上的 `CBAP Control Center` 是 CBAP OS 的本地控制面板：
+
+![CBAP Control Center](docs/screenshots/cbap-os-control.png)
+
+```text
+当前 CBAP / Python
+版本槽列表
+Apply hot-swap（pkexec）
+Host Bridge Test（写宿主机 allowlist）
+```
+
+Host Bridge 的安全测试说明在主仓：
+
+```text
+cyberdyne-bridge/docs/CBAP-OS-Host-Bridge.md
+```
+
 ISO 不入库（`.gitignore` 排除 `*.iso`）。
 
 ## 测试
